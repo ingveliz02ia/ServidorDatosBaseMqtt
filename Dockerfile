@@ -1,6 +1,6 @@
-FROM python:3.13.8
+FROM python:3.11
 
-WORKDIR 
+WORKDIR /Data
 
 COPY requirements.txt ./
 RUN pip3 install --no-cache-dir -r requirements.txt
