@@ -3,25 +3,29 @@ import pymysql
 import sys
 import logging
 import time
+from dotenv import load_dotenv
+import os
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+load_dotenv()
+
 DB_CONFIG = {
-    "host": "hopper.proxy.rlwy.net",
-    "user": "root",
-    "password": "NkkAdUvkwKhYlGYVxVzZoyEowOaifJWe",
-    "database": "railway",
-    "port" : 22810,
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME"),
+    "port": int(os.getenv("DB_PORT")),
     "charset": "utf8mb4",
     "cursorclass": pymysql.cursors.DictCursor
 }
 
 MQTT_CONFIG = {
-    "host": "tmaquinas.cloud.shiftr.io",
-    "port": 1883,
-    "username": "tmaquinas",
-    "password": "123456",
-    "topic": "online"
+    "host": os.getenv("MQTT_HOST"),
+    "port": int(os.getenv("MQTT_PORT")),
+    "username": os.getenv("MQTT_USER"),
+    "password": os.getenv("MQTT_PASSWORD"),
+    "topic": os.getenv("MQTT_TOPIC")
 }
 
 # ---------------------

@@ -1,0 +1,3 @@
+svirtual
+*.pyc
+.env copy
