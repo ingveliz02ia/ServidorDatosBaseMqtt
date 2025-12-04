@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.13
 
 WORKDIR /Data
 
@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 80
 
-CMD ["python", "servidordatos.py"]
+CMD ["python", "app.py"]
