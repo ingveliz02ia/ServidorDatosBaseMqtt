@@ -3,6 +3,7 @@ import pymysql
 import sys
 import logging
 import time
+import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 
@@ -129,7 +130,7 @@ while True:
         logging.error("Error en MQTT: %s. Reintentando en 5s...", e)
         time.sleep(5)
 
-    if __name__ == "__main__":
-        #app.run(port=6000, debug=True)
-        app.run (host='0.0.0.0', port=5000)
+#    if __name__ == "__main__":
+#        #app.run(port=6000, debug=True)
+#        app.run (host='0.0.0.0', port=80)
     
