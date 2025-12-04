@@ -124,7 +124,7 @@ while True:
         logging.error("Error en MQTT: %s. Reintentando en 5s...", e)
         time.sleep(5)
 
-    if __name__ == '__main__':
+    if __name__ == "__main__":
         #app.run(port=6000, debug=True)
-        serve (servidordatos, host='0.0.0.0', port=80)
+        app.run (host='0.0.0.0', port=5000)
     
