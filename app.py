@@ -130,6 +130,9 @@ while True:
         logging.error("Error en MQTT: %s. Reintentando en 5s...", e)
         time.sleep(5)
 
+# Si tu proyecto no necesita un servidor HTTP y solo corre MQTT, no necesitas app.run(). Basta con ejecutar el loop de MQTT.
+# worker: → tipo de proceso, porque no es una app web. eso usaremos en procfile
+# Railway ejecutará tu script continuamente como proceso en segundo plano.
 #    if __name__ == "__main__":
 #        #app.run(port=6000, debug=True)
 #        app.run (host='0.0.0.0', port=80)
