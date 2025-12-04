@@ -4,7 +4,7 @@ import sys
 import logging
 import time
 from dotenv import load_dotenv
-import os
+from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -27,6 +27,11 @@ MQTT_CONFIG = {
     "password": os.getenv("MQTT_PASSWORD"),
     "topic": os.getenv("MQTT_TOPIC")
 }
+def hora_peru():
+    tz = timezone(timedelta(hours=-5))
+    return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+import os
+
 
 # ---------------------
 # Conectar a la DB con reintentos
@@ -76,9 +81,9 @@ def on_message(client, userdata, msg):
         sql = """
         INSERT INTO data_reg
         (id_data, codigo_chip, cuenta_in1, cuenta_in2, cuenta_out1, cuenta_out2, crc, evento, estado_relay, Fecha_data, codigo_data_id)
-        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, NULL)
+        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
         """
-        params = (lista[0], lista[1], lista[2], lista[3], lista[4], lista[5], lista[6], lista[7])
+        params = (lista[0], lista[1], lista[2], lista[3], lista[4], lista[5], lista[6], lista[7],hora_peru())
 
         # Intentar insertar con reintentos
         for attempt in range(3):
