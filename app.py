@@ -7,10 +7,17 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 
+# -------------------------------------------------------------
+# LOGGING CONFIG
+# -------------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Load environment variables
 load_dotenv()
 
+# -------------------------------------------------------------
+# DATABASE CONFIG
+# -------------------------------------------------------------
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
     "user": os.getenv("DB_USER"),
@@ -21,6 +28,9 @@ DB_CONFIG = {
     "cursorclass": pymysql.cursors.DictCursor
 }
 
+# -------------------------------------------------------------
+# MQTT CONFIG
+# -------------------------------------------------------------
 MQTT_CONFIG = {
     "host": os.getenv("MQTT_HOST"),
     "port": int(os.getenv("MQTT_PORT")),
@@ -28,17 +38,20 @@ MQTT_CONFIG = {
     "password": os.getenv("MQTT_PASSWORD"),
     "topic": os.getenv("MQTT_TOPIC")
 }
+
+# -------------------------------------------------------------
+# FUNCTION — Hora Perú
+# -------------------------------------------------------------
 def hora_peru():
     tz = timezone(timedelta(hours=-5))
     return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-import os
 
 
-# ---------------------
-# Conectar a la DB con reintentos
-# ---------------------
+# -------------------------------------------------------------
+# DB CONEXIÓN CON REINTENTOS
+# -------------------------------------------------------------
 def connect_db(retries=5, delay=5):
-    for attempt in range(1, retries+1):
+    for attempt in range(1, retries + 1):
         try:
             db = pymysql.connect(**DB_CONFIG)
             logging.info("Conectado a la base de datos")
@@ -46,14 +59,31 @@ def connect_db(retries=5, delay=5):
         except pymysql.MySQLError as e:
             logging.error("Error conectando a DB (intento %d/%d): %s", attempt, retries, e)
             time.sleep(delay)
-    logging.critical("No se pudo conectar a la base de datos. Saliendo...")
+
+    logging.critical("No se pudo conectar a la base de datos. Finalizando...")
     sys.exit()
 
+# Mantener referencia global de DB
 db = connect_db()
 
-# ---------------------
-# Callbacks MQTT
-# ---------------------
+
+# -------------------------------------------------------------
+# CURSOR SAFE — Garantiza conexión viva
+# -------------------------------------------------------------
+def get_cursor():
+    global db
+    try:
+        db.ping(reconnect=True)  # Si expira, reconecta automáticamente
+    except:
+        logging.warning("Conexión caída, reconectando DB...")
+        db = connect_db()
+
+    return db.cursor()
+
+
+# -------------------------------------------------------------
+# MQTT CALLBACKS
+# -------------------------------------------------------------
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logging.info("Conectado al broker MQTT")
@@ -61,14 +91,19 @@ def on_connect(client, userdata, flags, rc):
     else:
         logging.error("Error de conexión MQTT: %s", rc)
 
+
 def on_disconnect(client, userdata, rc):
     if rc != 0:
-        logging.warning("Desconectado inesperadamente del broker, reconectando...")
-        try:
-            client.reconnect()
-        except Exception as e:
-            logging.error("Fallo al reconectar: %s", e)
-            time.sleep(5)
+        logging.warning("MQTT desconectado, intentando reconectar...")
+        while True:
+            try:
+                client.reconnect()
+                logging.info("Reconexion MQTT exitosa")
+                break
+            except Exception as e:
+                logging.error("Error al reconectar MQTT: %s", e)
+                time.sleep(5)
+
 
 def on_message(client, userdata, msg):
     try:
@@ -76,64 +111,72 @@ def on_message(client, userdata, msg):
         lista = payload_str.split("&")
 
         if len(lista) < 8:
-            logging.warning("Mensaje incompleto: %s", payload_str)
+            logging.warning("Mensaje incompleto recibido: %s", payload_str)
             return
+
+        logging.info("Payload recibido: %s", payload_str)
 
         sql = """
         INSERT INTO data_reg
-        (id_data, codigo_chip, cuenta_in1, cuenta_in2, cuenta_out1, cuenta_out2, crc, evento, estado_relay, Fecha_data, codigo_data_id)
+        (id_data, codigo_chip, cuenta_in1, cuenta_in2, cuenta_out1, cuenta_out2, crc,
+         evento, estado_relay, Fecha_data, codigo_data_id)
         VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL)
         """
-        params = (lista[0], lista[1], lista[2], lista[3], lista[4], lista[5], lista[6], lista[7],hora_peru())
 
-        # Intentar insertar con reintentos
+        params = (
+            lista[0], lista[1], lista[2], lista[3],
+            lista[4], lista[5], lista[6], lista[7], hora_peru()
+        )
+
+        # Intentar 3 veces insertar
         for attempt in range(3):
             try:
-                with db.cursor() as cursor:
-                    cursor.execute(sql, params)
+                cursor = get_cursor()
+                cursor.execute(sql, params)
                 db.commit()
-                logging.info("Guardado en DB: %s", payload_str)
+                logging.info("Dato guardado exitosamente")
                 break
-            except pymysql.MySQLError as e:
+
+            except pymysql.OperationalError as e:
+                logging.error("Error conexión DB (reintento %d/3): %s", attempt + 1, e)
                 db.rollback()
-                logging.error("Error guardando en DB (intento %d/3): %s", attempt+1, e)
                 time.sleep(1)
+
+            except Exception as e:
+                logging.error("Error SQL: %s", e)
+                db.rollback()
+                break
+
         else:
-            logging.error("No se pudo guardar el mensaje tras 3 intentos: %s", payload_str)
+            logging.error("No se pudo guardar mensaje tras 3 intentos: %s", payload_str)
 
     except Exception as e:
         logging.exception("Error procesando mensaje MQTT: %s", e)
 
-# ---------------------
-# Cliente MQTT
-# ---------------------
-#client = mqtt.Client("Servidor de Datos")
+
+# -------------------------------------------------------------
+# MQTT CLIENT SETUP
+# -------------------------------------------------------------
 client = mqtt.Client(client_id="Servidor de Datos", protocol=mqtt.MQTTv311)
 client.username_pw_set(MQTT_CONFIG['username'], MQTT_CONFIG['password'])
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
 client.on_message = on_message
 
-# ---------------------
-# Conectar y loop
-# ---------------------
+
+# -------------------------------------------------------------
+# LOOP PRINCIPAL — ROBUSTO
+# -------------------------------------------------------------
 while True:
     try:
         client.connect(MQTT_CONFIG['host'], MQTT_CONFIG['port'], 60)
-        client.loop_forever()
+        client.loop_forever()  # Maneja reconexión automática
     except KeyboardInterrupt:
         logging.info("Cerrando MQTT y DB...")
         client.disconnect()
         db.close()
         sys.exit()
+
     except Exception as e:
         logging.error("Error en MQTT: %s. Reintentando en 5s...", e)
         time.sleep(5)
-
-# Si tu proyecto no necesita un servidor HTTP y solo corre MQTT, no necesitas app.run(). Basta con ejecutar el loop de MQTT.
-# worker: → tipo de proceso, porque no es una app web. eso usaremos en procfile
-# Railway ejecutará tu script continuamente como proceso en segundo plano.
-#    if __name__ == "__main__":
-#        #app.run(port=6000, debug=True)
-#        app.run (host='0.0.0.0', port=80)
-    
